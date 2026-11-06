@@ -115,7 +115,9 @@ test('the mobile import and review flow fits a narrow viewport', async ({ page }
   await expect(dialog).toBeHidden();
   const review = page.getByRole('form', { name: `Review ${actionTitle}`, exact: true });
   await expect(review).toBeVisible();
-  expect(await hasOverflow()).toBe(false);
+  const overflowingElements = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('body *')).map((element) => ({ tag: element.tagName, className: typeof element.className === 'string' ? element.className : '', right: Math.round(element.getBoundingClientRect().right), width: Math.round(element.getBoundingClientRect().width) })).filter((element) => element.width > 0 && element.right > window.innerWidth + 1));
+  if (await hasOverflow()) await page.screenshot({ path: testInfo.outputPath('mobile-review-overflow.png'), fullPage: true });
+  expect(await hasOverflow(), JSON.stringify(overflowingElements)).toBe(false);
   await review.getByRole('button', { name: 'Accept action', exact: true }).click();
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('article', { name: actionTitle, exact: true })).toBeVisible();

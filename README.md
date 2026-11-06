@@ -2,6 +2,14 @@
 
 **Turn marked meeting notes into reviewed, evidence-linked follow-through.**
 
+[![Checks and demo](https://github.com/Harshiv2718/proofline/actions/workflows/ci.yml/badge.svg)](https://github.com/Harshiv2718/proofline/actions/workflows/ci.yml)
+
+**[Try the interactive demo](https://harshiv2718.github.io/proofline/)** · [See the code walkthrough](docs/interview-guide.md) · [Verification](docs/verification.md)
+
+The hosted demo saves synthetic data in your browser. Run the full Django/database application locally with the commands below.
+
+![Proofline's task board, with source-linked actions and review progress](docs/screenshots/overview.png)
+
 Meeting actions often lose their context when they are copied into a task board. Proofline keeps each suggestion connected to the exact line that produced it. A person reviews the wording, owner and date before an action becomes a task. Decisions remain visible with the meeting, and a small set of metrics explains what has been reviewed and completed.
 
 This student-built project combines a React/TypeScript interface, a Django/Python GraphQL API, relational data, validation, automated tests and repeatable local setup. The demonstration uses synthetic data.
@@ -15,6 +23,8 @@ This student-built project combines a React/TypeScript interface, a Django/Pytho
 5. Inspect completion, overdue work and review progress. Every metric has a stated denominator.
 
 The extractor is **deterministic rules, not an AI model**. It runs without API keys or paid services. It deliberately does not interpret ordinary prose such as “Maya will ship this Friday.”
+
+![Human review keeps each suggestion beside its original meeting evidence](docs/screenshots/review.png)
 
 ```text
 We discussed the first export release.
