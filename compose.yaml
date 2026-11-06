@@ -1,0 +1,42 @@
+# Local development: HTTP on localhost only, synthetic sample data, no public deployment.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: proofline
+      POSTGRES_USER: proofline
+      POSTGRES_PASSWORD: local-development-only
+    volumes:
+      - proofline_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proofline -d proofline"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,api
+      DATABASE_URL: postgresql://proofline:local-development-only@db:5432/proofline
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  proofline_db:

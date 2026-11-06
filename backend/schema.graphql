@@ -1,0 +1,117 @@
+type Query {
+  dashboard: DashboardType!
+}
+
+type DashboardType {
+  meetings: [MeetingType!]!
+  tasks: [TaskType!]!
+  metrics: MetricsType!
+}
+
+type MeetingType {
+  id: ID!
+  title: String!
+  meetingDate: Date!
+  notes: String!
+  createdAt: DateTime!
+  suggestions: [SuggestionType!]!
+}
+
+"""
+The `Date` scalar type represents a Date
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar Date
+
+"""
+The `DateTime` scalar type represents a DateTime
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar DateTime
+
+type SuggestionType {
+  id: ID!
+  kind: SuggestionKind!
+  title: String!
+  owner: String!
+  dueDate: Date
+  sourceLine: Int!
+  sourceQuote: String!
+  reviewState: ReviewState!
+  taskId: ID
+}
+
+enum SuggestionKind {
+  ACTION
+  DECISION
+}
+
+enum ReviewState {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+type TaskType {
+  id: ID!
+  title: String!
+  owner: String!
+  dueDate: Date
+  status: TaskStatus!
+  version: Int!
+  meetingId: ID!
+  meetingTitle: String!
+  suggestionId: ID!
+  sourceLine: Int!
+  sourceQuote: String!
+  updatedAt: DateTime!
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+type MetricsType {
+  totalTasks: Int!
+  doneTasks: Int!
+  overdueTasks: Int!
+  completionRate: Float!
+  reviewRate: Float!
+  pendingSuggestions: Int!
+  meetingsCount: Int!
+  asOf: Date!
+}
+
+type Mutation {
+  importMeeting(meetingDate: Date!, notes: String!, title: String!): ImportMeeting
+  reviewSuggestion(decision: ReviewDecision!, dueDate: Date, id: ID!, owner: String, title: String): ReviewSuggestion
+  updateTask(expectedVersion: Int!, id: ID!, status: TaskStatus!): UpdateTask
+  seedDemo: SeedDemo
+}
+
+type ImportMeeting {
+  meeting: MeetingType!
+  duplicate: Boolean!
+}
+
+type ReviewSuggestion {
+  suggestion: SuggestionType!
+  task: TaskType
+}
+
+enum ReviewDecision {
+  ACCEPT
+  REJECT
+}
+
+type UpdateTask {
+  task: TaskType!
+}
+
+type SeedDemo {
+  dashboard: DashboardType!
+}

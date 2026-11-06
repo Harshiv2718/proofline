@@ -1,0 +1,124 @@
+name: Checks and demo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proofline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Django / ${{ matrix.database }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: proofline
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: proofline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U proofline -d proofline"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgresql://proofline:ci-test-only@localhost:5432/proofline' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python backend/manage.py check
+      - run: python backend/manage.py makemigrations --check --dry-run
+      - run: python backend/manage.py test followthrough -v 2
+
+  frontend:
+    name: TypeScript, component tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend test
+      - run: npm --prefix frontend run build
+
+  browser:
+    name: Browser / real Django API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -r requirements.txt
+      - run: npm --prefix frontend ci
+      - run: npm --prefix e2e ci
+      - run: cd e2e && npx playwright install --with-deps chromium
+      - run: npm --prefix e2e test
+
+  containers:
+    name: Docker Compose / full-stack smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker compose config --quiet
+      - run: docker compose up --build -d --wait
+      - run: curl --fail http://127.0.0.1:8080/api/health/
+      - run: curl --fail http://127.0.0.1:8080/ | grep -q 'Proofline'
+      - run: python3 scripts/smoke.py http://127.0.0.1:8080
+      - if: always()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down --volumes
+
+  demo:
+    name: Publish browser-only demo
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, browser, containers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend run build
+        env:
+          VITE_DEMO: 'true'
+          VITE_BASE_PATH: /proofline/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: frontend/dist
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

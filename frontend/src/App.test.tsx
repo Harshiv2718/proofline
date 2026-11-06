@@ -1,0 +1,65 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { App } from './App';
+import { createDemoApi, DEMO_STORAGE_KEY } from './data/demo';
+import { ApiError } from './data/domain';
+
+beforeEach(() => { localStorage.clear(); window.location.hash = 'overview'; });
+describe('human review and follow-through', () => {
+  it('imports notes, edits and accepts an action, follows its source, and saves its status', async () => {
+    const user = userEvent.setup();
+    const api = createDemoApi(localStorage);
+    render(<App api={api} demo />);
+    await screen.findByRole('heading', { name: /Your follow-through board/ });
+    expect(screen.getByText('Interactive demo · saved in this browser')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Import meeting' }));
+    const dialog = screen.getByRole('dialog', { name: 'Import a meeting' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Meeting title' }), 'Browser flow meeting');
+    await user.click(within(dialog).getByRole('textbox', { name: 'Meeting notes' }));
+    await user.paste('Context remains visible.\nACTION [Maya] Ship a useful export | due:2026-11-12\nDECISION: Start small');
+    await user.click(within(dialog).getByRole('button', { name: 'Find suggestions' }));
+    const review = await screen.findByRole('form', { name: 'Review Ship a useful export' });
+    const title = within(review).getByRole('textbox', { name: 'Suggestion title' });
+    await user.clear(title); await user.type(title, 'Ship the accessible export');
+    const owner = within(review).getByRole('textbox', { name: 'Owner' });
+    await user.clear(owner); await user.type(owner, 'Ada');
+    await user.click(within(review).getByRole('button', { name: 'Accept action' }));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Review Ship a useful export' })).not.toBeInTheDocument());
+    await user.click(screen.getByRole('link', { name: 'Overview' }));
+    const card = await screen.findByRole('article', { name: 'Ship the accessible export' });
+    expect(within(card).getByText('Ada')).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'View source for Ship the accessible export' }));
+    const source = screen.getByRole('dialog', { name: 'Back to the source' });
+    expect(within(source).getByText('ACTION [Maya] Ship a useful export | due:2026-11-12')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await user.selectOptions(within(card).getByRole('combobox', { name: 'Status for Ship the accessible export' }), 'DONE');
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'Done' })).getByRole('article', { name: 'Ship the accessible export' })).toBeInTheDocument());
+    const persisted = await createDemoApi(localStorage).getDashboard();
+    expect(persisted.tasks.find((task) => task.title === 'Ship the accessible export')).toMatchObject({ status: 'DONE', version: 2 });
+    expect(localStorage.getItem(DEMO_STORAGE_KEY)).toContain('Ship the accessible export');
+  });
+  it('restores the task and shows a visible error if a status update fails', async () => {
+    const user = userEvent.setup();
+    const api = createDemoApi(localStorage);
+    const task = (await api.getDashboard()).tasks.find((task) => task.status === 'TODO')!;
+    api.updateTask = vi.fn().mockRejectedValue(new ApiError('Your changes could not be saved.', 'STORAGE_ERROR'));
+    render(<App api={api} demo />);
+    const card = await screen.findByRole('article', { name: task.title });
+    await user.selectOptions(within(card).getByRole('combobox', { name: `Status for ${task.title}` }), 'DONE');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your changes could not be saved.');
+    expect(within(screen.getByRole('region', { name: 'To do' })).getByRole('article', { name: task.title })).toBeInTheDocument();
+    expect((await api.getDashboard()).tasks.find((item) => item.id === task.id)?.status).toBe('TODO');
+  });
+  it('filters overdue tasks and shows an actionable no-results state', async () => {
+    const user = userEvent.setup();
+    render(<App api={createDemoApi(localStorage)} demo />);
+    await screen.findByRole('heading', { name: /Your follow-through board/ });
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Due date filter' }), 'overdue');
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+    await user.type(screen.getByRole('searchbox', { name: 'Search tasks' }), 'not-a-real-task');
+    expect(screen.getByRole('heading', { name: 'No actions match those filters.' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.getAllByRole('article').length).toBeGreaterThan(1);
+  });
+});
